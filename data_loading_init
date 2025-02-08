@@ -1,51 +1,51 @@
-import os
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+import os
 
-def read_dat_file(file_path):
-    try:
-        return np.genfromtxt(file_path)
-    except Exception as e:
-        print(f"Error reading {file_path}: {e}")
-        return None
+NUM_FILES = 10
+FILE_SIZE_MB = 500
+BYTES_PER_MB = 1024 * 1024
+NUM_POINTS = int(FILE_SIZE_MB * BYTES_PER_MB / 8 / 2)
 
-def load_data_from_directories(root_dir, sub_dirs, seq_length=1000, min_lines=10000):
-    data = []
-    for sub_dir in sub_dirs:
-        dir_path = os.path.join(root_dir, sub_dir)
-        print(f"Searching in: {dir_path}")
-        for root, _, files in os.walk(dir_path):
-            for file in files:
-                if file.endswith('.dat'):
-                    file_path = os.path.join(root, file)
-                    print(f"Found .dat file: {file_path}")
-                    try:
-                        file_data = read_dat_file(file_path)
-                        
-                        if file_data is None or file_data.shape[0] < min_lines:
-                            print(f"Skipping {file_path} due to insufficient data points ({file_data.shape[0] if file_data is not None else 'N/A'} < {min_lines})")
-                            continue
-                        
-                        if file_data.shape[0] < seq_length:
-                            padded_data = np.pad(file_data, ((0, seq_length - file_data.shape[0]), (0, 0)), mode='constant', constant_values=0)
-                            data.append(padded_data)
-                        elif file_data.shape[0] > seq_length:
-                            trimmed_data = file_data[:seq_length]
-                            data.append(trimmed_data)
-                        else:
-                            data.append(file_data)
-                    except Exception as e:
-                        print(f"Error reading {file_path}: {e}")
-    
-    if len(data) == 0:
-        raise ValueError("No valid .dat files found or all files are invalid.")
-    return np.array(data)
+def set_random_seed(seed):
+    np.random.seed(seed)
 
-def preprocess_data(data):
-    if data.size == 0:
-        raise ValueError("No data to preprocess.")
-    
-    if np.any(np.isnan(data)) or np.any(np.isinf(data)):
-        raise ValueError("Data contains NaN or inf values. Please clean the dataset.")
-    
-    data_normalized = (data - np.mean(data, axis=(0, 1))) / np.std(data, axis=(0, 1))  
-    return data_normalized.astype(np.float32)  
+def generate_hamiltonian_params(num_spins):
+    chemical_shifts = np.random.uniform(0, 10, num_spins)
+    j_couplings = np.random.uniform(0, 20, (num_spins, num_spins))
+    dipolar_couplings = np.random.uniform(0, 5, (num_spins, num_spins))
+    return chemical_shifts, j_couplings, dipolar_couplings
+
+def simulate_fid(num_points, num_spins, chemical_shifts, j_couplings, dipolar_couplings, t2_times):
+    time_points = np.linspace(0, 1, num_points)
+    fid = np.zeros(num_points, dtype=np.complex128)
+    for i in range(num_spins):
+        frequency = chemical_shifts[i] * 1e3
+        decay = np.exp(-time_points / t2_times[i])
+        oscillation = np.exp(1j * 2 * np.pi * frequency * time_points)
+        fid += oscillation * decay
+    for i in range(num_spins):
+        for j in range(i + 1, num_spins):
+            coupling_frequency = j_couplings[i, j] + dipolar_couplings[i, j]
+            fid *= np.exp(1j * 2 * np.pi * coupling_frequency * time_points)
+    return time_points, np.real(fid)
+
+def generate_synthetic_nmr(file_index):
+    set_random_seed(file_index)
+    num_spins = np.random.randint(2, 10)
+    chemical_shifts, j_couplings, dipolar_couplings = generate_hamiltonian_params(num_spins)
+    t2_times = np.random.uniform(0.01, 0.5, num_spins)
+    time_points, fid = simulate_fid(NUM_POINTS, num_spins, chemical_shifts, j_couplings, dipolar_couplings, t2_times)
+    filename = f"synthetic_nmr_{file_index}.csv"
+    data = np.column_stack((time_points, fid))
+    np.savetxt(filename, data, delimiter=",")
+    print(f"Generated {filename} ({data.nbytes / BYTES_PER_MB:.2f} MB)")
+    plt.plot(time_points[:1000], fid[:1000])
+    plt.title(f"Synthetic NMR Data {file_index}")
+    plt.xlabel("Time (s)")
+    plt.ylabel("Amplitude")
+    plt.show()
+
+for i in range(NUM_FILES):
+    generate_synthetic_nmr(i)
