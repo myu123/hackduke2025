@@ -5,8 +5,15 @@ Max Yu & Seth Fuqua
 THE GOATS!
 
 
+talk to ter horst = 2pm
+zulf --> nmr better and can be applied in a variety fo ways
 
-nmr --> zulf
-talk to ter horst?
 
-zulf --> nmr better?
+Model Architecture:
+Max & Seth
+
+Front End:
+Max
+
+Data Handling:
+Seth
