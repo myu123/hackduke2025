@@ -333,7 +333,7 @@ We learned a lot about front-end web development thanks to Streamlit as it enabl
 ## What's next for NMR Spectroscopy: Nuclear Resonance Sequence Conversion
 We're excited to say our research will continue with the guidance of Dr. Theis. Together, we'll refine our Nuclear Resonance Sequence Conversion techniques to make NMR spectroscopy more precise, affordable, and accessible. This collaboration is especially promising for pharmacology and healthcare—improved NMR methods can enhance drug research and development (by reducing the need for crystallization and x-ray refraction of complex compounds like sponge antibiotics), provide useful legal evidence, and support personal health.
 
-References
+## References
 Romero, J.A., Kazimierczuk, K., Kasprzak, P. Optimizing Measurements of Linear Changes of NMR Signal Parameters.
 Barskiy, D.A., Tayler, M.C., Marco-Rius, I. et al. Zero-field nuclear magnetic resonance of chemically exchanging systems. Nat Commun 10, 3002 (2019).
 Nerli, S., McShan, A.C., Sgourakis, N.G. Zero-field NMR of chemical and biological fluids.
