@@ -7,24 +7,9 @@ from tqdm import tqdm
 import psutil
 import matplotlib.pyplot as plt
 import numpy as np
-
-# Import simulation utilities and dataset from simulation.py.
 from hf_ulf_synthetic import simulate_random_nmr, simulate_random_zulf, downsample
 
-# Define the synthetic dataset.
 class SyntheticNMRDataset(torch.utils.data.Dataset):
-    """
-    Synthetic NMR Dataset.
-    
-    For each sample:
-      - A high-field FID is generated via simulate_random_nmr()
-      - A ZULF FID is generated via simulate_random_zulf()
-      
-    The signals are downsampled to a fixed sequence length.
-    The baseline is computed by scaling the ZULF FID so that its mean magnitude matches that of the high-field FID.
-    The target is the difference between the high-field FID and this baseline.
-    The input is a 2-channel tensor: [baseline, ZULF FID].
-    """
     def __init__(self, num_samples, seq_length):
         self.num_samples = num_samples
         self.seq_length = seq_length
@@ -52,7 +37,6 @@ def print_memory_usage():
     print(f"Memory usage: {process.memory_info().rss / 1024 ** 2:.2f} MB")
 
 def enforce_channels_first(x):
-    # Ensure tensor shape is [batch, channels, seq_length]
     if x.dim() == 3:
         if x.shape[1] != 2 and x.shape[2] == 2:
             x = x.permute(0, 2, 1)
@@ -63,12 +47,12 @@ class EarlyStopping:
         self.patience = patience
         self.delta = delta
         self.reset()
-    
+
     def reset(self):
         self.best_loss = float('inf')
         self.counter = 0
         self.early_stop = False
-    
+
     def __call__(self, val_loss):
         if val_loss < self.best_loss - self.delta:
             self.best_loss = val_loss
@@ -78,7 +62,6 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 self.early_stop = True
 
-# Import model and loss from model.py.
 from model import HybridZulfModel, weighted_mse_loss
 
 def train():
@@ -93,25 +76,25 @@ def train():
         'train_samples': 5000,
         'test_samples': 500
     }
-    
+
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     print_memory_usage()
-    
+
     train_dataset = SyntheticNMRDataset(num_samples=config['train_samples'], seq_length=config['seq_length'])
     test_dataset = SyntheticNMRDataset(num_samples=config['test_samples'], seq_length=config['seq_length'])
-    
+
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'],
                                                 shuffle=True, num_workers=4, pin_memory=True)
     test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'],
                                                num_workers=2, pin_memory=True)
-    
+
     model = HybridZulfModel(input_channels=2, seq_length=config['seq_length']).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-5)
     scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.3, patience=2, verbose=True)
     early_stopping = EarlyStopping(patience=config['patience'])
     scaler = GradScaler(enabled=config['full_precision'])
-    
+
     best_loss = float('inf')
     for epoch in range(config['num_epochs']):
         model.train()
@@ -132,7 +115,7 @@ def train():
                 epoch_loss += loss.item()
                 tepoch.set_postfix(loss=f"{loss.item():.4f}", lr=f"{optimizer.param_groups[0]['lr']:.2e}")
         epoch_loss /= len(train_loader)
-        
+
         model.eval()
         val_loss = 0.0
         with torch.no_grad():
@@ -142,7 +125,7 @@ def train():
                 pred = model(x)
                 val_loss += weighted_mse_loss(pred, y).item()
         val_loss /= len(test_loader)
-        
+
         print(f"Epoch {epoch+1} | Train Loss: {epoch_loss:.4f} | Val Loss: {val_loss:.4f}")
         print(f"Current Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")
         print_memory_usage()
