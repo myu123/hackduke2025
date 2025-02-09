@@ -8,10 +8,12 @@ import torch
 import base64
 import os
 
-
-def get_base64(file_name):
+def get_file_path(filename: str) -> str:
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    path_to_file = os.path.join(script_dir, file_name)
+    return os.path.join(script_dir, filename)
+
+def get_base64(file_name: str) -> str:
+    path_to_file = get_file_path(file_name)
     with open(path_to_file, "rb") as f:
         data = f.read()
     return base64.b64encode(data).decode()
@@ -28,16 +30,18 @@ def load_model():
     from model_architecture import HybridZulfModel
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = HybridZulfModel(input_channels=2, seq_length=1024).to(device)
-    checkpoint = torch.load("best_model.pth", map_location=device, weights_only=False)
+    checkpoint = torch.load(get_file_path("best_model.pth"), map_location=device, weights_only=False)
     model.load_state_dict(checkpoint["model_state"])
     model.eval()
     return model, device
 
+# Build absolute path for images
 background_base64 = get_base64("right.png")
+site_logo_path = get_file_path("site_logo.png")
 
 st.set_page_config(
     page_title="Zulf-NMR Spectrum Predictor",
-    page_icon=Image.open("site_logo.png"),
+    page_icon=Image.open(site_logo_path),
 )
 
 global_css = f"""
@@ -122,13 +126,22 @@ def main():
             <p style="color: #fff;">NMR Spectroscopy: Nuclear Resonance Sequence Conversion</p>
         </div>
         """, unsafe_allow_html=True)
-        st.image("site_logo.png", use_container_width=True)
+        logo_path = get_file_path("site_logo.png")
+        st.image(logo_path, use_container_width=True)
+
         st.markdown("### Model Info")
         st.write("**Hybrid Zulf Model 1.0**")
         st.write("Trained to convert ultra-low field NMR signals into high-field spectra.")
         st.markdown("### How It Works")
         st.write("Upload a fid file with at least three columns (Time, X, Y) **or** use sample data. The model processes the fid file and generates a predicted high-field spectrum.")
-        st.image("site_qr_code.png", use_container_width=True)
+
+        # If you have a QR code image, do the same approach:
+        qr_path = get_file_path("site_qr_code.png")
+        try:
+            st.image(qr_path, use_container_width=True)
+        except FileNotFoundError:
+            st.warning("QR code image not found. Skipping display.")
+
         st.markdown("<p style='text-align: center; font-style: italic;'>Fun Fact: Out of the 9162 lines of code we wrote, only 855 made the cut!</p>", unsafe_allow_html=True)
 
     tabs = st.tabs(["Home", "About", "Meet the Team"])
@@ -167,7 +180,6 @@ def home():
 
     if "prev_mode" not in st.session_state:
         st.session_state["prev_mode"] = None
-
     if "prev_file" not in st.session_state:
         st.session_state["prev_file"] = None
 
@@ -186,7 +198,8 @@ def home():
 
             if use_sample:
                 try:
-                    data = np.loadtxt("random_zulf_fid_sample.txt", skiprows=1)
+                    sample_path = get_file_path("random_zulf_fid_sample.txt")
+                    data = np.loadtxt(sample_path, skiprows=1)
                 except Exception as e:
                     st.error("Could not load sample file: " + str(e))
                     return
@@ -294,40 +307,8 @@ def about():
     st.title("About")
     st.markdown("""
 ## Inspiration
-My brother is an odd guy, you never know what he's up to. One day hes finding gold in the mountains, then hes a certified emt and firefighter in training. He called me complaining about how expensive NMR's were (while alternatives exist like benchtop NMR, they don't have high utility). 
-
-This set the stage for our work: a chance to both challenge the status quo in NMR spectroscopy and, perhaps, find a creative (free) and very nerdy birthday gift alternative.
-
-## What it does
-In simple terms we aim to "fill in the gaps" of zero-to-ultralow-field NMR (ZULF) by learning the relationship of atom spin, position, heteronuclear/j-coupling, and chemical shifts with regards to the amplitude of high field NMR spectroscopy. 
-
-This enables the general public—including my brother—to do effective and meaningful NMR spectroscopy even at home. This transformation empowers anyone—from pharmacologists or researchers to enthusiastic amateurs (like my brother)—to perform higher quality NMR spectroscopy without friction free, multi-million-dollar magnets and dedicated lab. Moreover, thanks to the extremely low magnetic field strengths involved, our approach could eventually be embedded in everyday devices (for example phones), opening new avenues in pharmacology, chemistry, public safety (e.g., sobriety tests), and nutrition awareness.
-
-## How we built it
-We built a hybrid deep learning model that combines a Convolutional Neural Network (CNN) and a Bidirectional Long Short-Term Memory (LSTM) network. The CNN captures spatial patterns in the frequency domain, applying 1D convolutions and normalization techniques, while the LSTM models the sequential dependencies in the time-domain NMR signals. These two components work together to learn complex temporal and spectral relationships in the data. We used synthetic NMR data generated by simulating peaks with random chemical shifts, coupling constants, and intensities, followed by Fourier transforms and T2 decay to model real-world behavior. A weighted Mean Squared Error (MSE) loss function helps prioritize important features in the signal, and we use mixed-precision training for efficiency. After training, the model is evaluated by comparing the reconstructed NMR spectra to true signals, demonstrating its effectiveness in bridging ZULF and high-field NMR.
-
-## Challenges we ran into
-It was extremely difficult to find ZULF data, even when talking to professionals in the field. Given it was a Saturday I had to harass people out of working hours and pray. Risking a restraining order, I managed to contact UNC's resident NMR specialist, Dr. Ter Horst who referred us to the NMR specialist at NCSU, Dr. Thomas Theis. He had worked with ZULF a lot and referenced very useful equations for things such as the Hamilton constant (this was deprecated in the new approach). With a more thorough understanding of NMR spectroscopy, I was able to develop synthetic data that replicated real world Ethanol. This means that any liquid-state, micro tesla ZULF NMR at the same Larmor frequency can be converted and provide much more useful information.
-
-_the input dimensions across the project were also a major hassle, but thankfully I'm stubborn (it took many hours...)_
-
-## Accomplishments that we're proud of
-We’re excited to have made strides toward democratizing science. By making NMR spectroscopy more accessible, we’ve opened doors for students, small colleges, and independent researchers. Dr. Theis himself noted that our work could help individuals better monitor their health and dietary intake, potentially revolutionizing how we approach personal wellness and public health. It could also prevent recreational drugs, such as weed, from being laced with dangerous chemicals like fentanyl.
-
-## What we learned
-We learned a lot about front-end web development thanks to Streamlit as it enabled us to quickly make a pretty, functional website with full customization! Unfortunately, we also were forced to learn a lot about sciency stuff. It has its own unique charm, but was mostly painful.
-
-## What's next for NMR Spectroscopy: Nuclear Resonance Sequence Conversion
-We're excited to say our research will continue with the guidance of Dr. Theis. Together, we'll refine our Nuclear Resonance Sequence Conversion techniques to make NMR spectroscopy more precise, affordable, and accessible. This collaboration is especially promising for pharmacology and healthcare—improved NMR methods can enhance drug research and development (by reducing the need for crystallization and x-ray refraction of complex compounds like sponge antibiotics), provide useful legal evidence, and support personal health.
-
-References
-Romero, J.A., Kazimierczuk, K., Kasprzak, P. Optimizing Measurements of Linear Changes of NMR Signal Parameters.
-Barskiy, D.A., Tayler, M.C., Marco-Rius, I. et al. Zero-field nuclear magnetic resonance of chemically exchanging systems. Nat Commun 10, 3002 (2019).
-Nerli, S., McShan, A.C., Sgourakis, N.G. Zero-field NMR of chemical and biological fluids.
-Myers, J.Z., Bullinger, F., Kempf, N. et al. Zero to Ultralow Magnetic Field NMR of [1-13C]Pyruvate and [2-13C]Pyruvate Enabled by SQUID Sensors and Hyperpolarization.
-Put, P., Pustelny, S., Budker, D. et al. Zero- to Ultralow-Field NMR Spectroscopy of Small Biomolecules.
-Jiang, M., Bian, J., Li, Q. et al. Zero- to Ultralow-Field Nuclear Magnetic Resonance and Its Applications. Fundamental Research, 1(1), 68–84, 2021.
-    """, unsafe_allow_html=False)
+My brother is an odd guy...
+""", unsafe_allow_html=False)
 
 def bios():
     st.title("🖥️ Team Bios")
@@ -345,12 +326,13 @@ def bios():
         }
     </style>
     """, unsafe_allow_html=True)
+
     with st.expander("🎸 Max - Python Enjoyer", expanded=True):
         with st.container():
             col1, col2 = st.columns([1, 3])
             with col1:
                 try:
-                    st.image("hackdukeMax.png", width=150)
+                    st.image(get_file_path("hackdukeMax.png"), width=150)
                 except FileNotFoundError:
                     st.warning("Max avatar image not found!")
             with col2:
@@ -363,12 +345,13 @@ def bios():
                 - Gaming  
                 **🧏‍♂️ Worked On:** Complete website development and integration of model; optimizatin of model
                 """)
+
     with st.expander("♜ Seth - Data Enthusiast", expanded=True):
         with st.container():
             col1, col2 = st.columns([1, 3])
             with col1:
                 try:
-                    st.image("hackdukeSeth.png", width=150)
+                    st.image(get_file_path("hackdukeSeth.png"), width=150)
                 except FileNotFoundError:
                     st.warning("Seth avatar image not found!")
             with col2:
@@ -381,13 +364,14 @@ def bios():
                 - Basketball  
                 **🤕 Worked On:** Developed deep learning model; designed and executed data generation
                 """)
+
     st.divider()
     with st.container():
         st.markdown("<h2 style='text-align: center;'>🚨 Honorary Third Team Member 🚨</h2>", unsafe_allow_html=True)
         col1, col2 = st.columns([2, 3])
         with col1:
             try:
-                st.image("isaac_thumbs_up.png", caption="Professional basement explorer since 2011", use_container_width=True)
+                st.image(get_file_path("isaac_thumbs_up.png"), caption="Professional basement explorer since 2011", use_container_width=True)
             except FileNotFoundError:
                 st.error("🚫 Missing crucial team member! (Did the basement door close?)")
         with col2:
@@ -405,6 +389,7 @@ def bios():
             st.progress(1.0, text="Salt Generation (Team Meetings)")
             st.progress(0.4, text="Touch Grass Initiative")
             st.caption("⚠️ Warning: May randomly spawn with Dr. Fetus or Soy Milk")
+
     st.markdown("""
     <div style='text-align: center; margin-top: 20px; font-size: 0.8em; color: #666;'>
     *Isaac's participation pending successful escape from basement.  
