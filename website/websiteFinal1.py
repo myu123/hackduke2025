@@ -6,9 +6,13 @@ import time
 from PIL import Image
 import torch
 import base64
+import os
 
-def get_base64(file_path):
-    with open(file_path, "rb") as f:
+
+def get_base64(file_name):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    path_to_file = os.path.join(script_dir, file_name)
+    with open(path_to_file, "rb") as f:
         data = f.read()
     return base64.b64encode(data).decode()
 
