@@ -1,6 +1,7 @@
-torch
-numpy
+streamlit
 pandas
 altair
-streamlit
-Pillow
+time
+PIL
+torch
+base64
