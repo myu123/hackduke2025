@@ -1,7 +1,6 @@
 streamlit
 pandas
 altair
-time
 PIL
 torch
 base64
