@@ -24,31 +24,30 @@ def simulate_random_nmr():
     resolution = 4096
     dx = 0.1
     x_vals = np.arange(0, resolution + dx, dx)
-    
-    shift_a = np.random.uniform(1.2, 1.3)
-    shift_b = np.random.uniform(1.9, 2.0)
-    shift_c = np.random.uniform(4.05, 4.15)
-    
+
+    shift_a = np.random.uniform(1.25, 1.28)
+    shift_b = np.random.uniform(1.95, 1.98)
+    shift_c = np.random.uniform(4.08, 4.12)
+
     n_a = np.random.choice([1, 2])
     n_b = 0
     n_c = np.random.choice([2, 3])
-    
-    coupling_a = np.random.uniform(0.08, 0.12)
-    coupling_b = np.random.uniform(0.08, 0.12)
-    coupling_c = np.random.uniform(0.08, 0.12)
-    
-    intensity_a = np.random.uniform(2, 3)
-    intensity_b = np.random.uniform(2, 3)
-    intensity_c = np.random.uniform(1, 2)
-    
+
+    coupling_a = np.random.uniform(0.09, 0.11)
+    coupling_b = np.random.uniform(0.09, 0.11)
+    coupling_c = np.random.uniform(0.09, 0.11)
+
+    intensity_a = np.random.uniform(2.2, 2.5)
+    intensity_b = np.random.uniform(2.2, 2.5)
+    intensity_c = np.random.uniform(1.1, 1.4)
+
     a = feature(shift=shift_a, n=n_a, coupling=coupling_a, intensity=intensity_a, x=x_vals)
     b = feature(shift=shift_b, n=n_b, coupling=coupling_b, intensity=intensity_b, x=x_vals)
     c = feature(shift=shift_c, n=n_c, coupling=coupling_c, intensity=intensity_c, x=x_vals)
-    
+
     summed_features = a + b + c
-    
-    broadening = np.random.uniform(0.01, 0.015)
-    
+
+    broadening = np.random.uniform(0.01, 0.012)
     fid = makefid(summed_features, broadening, x_vals)
     spectrum = transform(fid, resolution=resolution)
     return x_vals, fid, spectrum
@@ -57,15 +56,15 @@ def simulate_random_zulf():
     resolution = 4096
     dt = 1e-4
     t_vals = np.arange(0, resolution * dt, dt)  
-    
-    peak1_freq = np.random.uniform(112, 114)
-    peak2_freq = np.random.uniform(187, 189)
-    
-    T2 = np.random.uniform(0.95, 1.05)
-    
+
+    peak1_freq = np.random.uniform(112.5, 113.5)
+    peak2_freq = np.random.uniform(187.5, 188.5)
+
+    T2 = np.random.uniform(0.97, 1.03)
+
     fid = (np.cos(2 * np.pi * peak1_freq * t_vals) +
            np.cos(2 * np.pi * peak2_freq * t_vals)) * np.exp(-t_vals / T2)
-    
+
     fft_vals = np.fft.fft(fid)
     fft_vals = np.fft.fftshift(fft_vals)
     freqs = np.fft.fftfreq(len(fid), d=dt)
@@ -82,25 +81,25 @@ def export_csv(data, folder, filename, header=None):
     print(f"Saved file: {filepath}")
 
 def main():
-    n_simulations = 2000
-    
+    n_simulations = 500
+
     base_folder = "fid_files"
     high_field_folder = os.path.join(base_folder, "high_field")
     zulf_folder = os.path.join(base_folder, "ultra_low_field")
-    
+
     hf_fid_folder = os.path.join(high_field_folder, "nmr_fid")
     hf_spec_folder = os.path.join(high_field_folder, "nmr_spectrum")
     zulf_fid_folder = os.path.join(zulf_folder, "zulf_fid")
     zulf_spec_folder = os.path.join(zulf_folder, "zulf_spectrum")
-    
+
     for folder in [hf_fid_folder, hf_spec_folder, zulf_fid_folder, zulf_spec_folder]:
         if not os.path.exists(folder):
             os.makedirs(folder)
-    
+
     for i in range(n_simulations):
         x_nmr, fid_nmr, spectrum_nmr = simulate_random_nmr()
         freq_nmr, spec_nmr = spectrum_nmr
-        
+
         t_zulf, fid_zulf, spectrum_zulf = simulate_random_zulf()
         freq_zulf, spec_zulf = spectrum_zulf
 
