@@ -3,4 +3,3 @@ pandas
 altair
 Pillow
 torch
-base64
