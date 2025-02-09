@@ -21,47 +21,47 @@ def transform(fid, resolution=4096):
     return freq_axis, fft_vals
 
 def simulate_random_nmr():
-
     resolution = 4096
     dx = 0.1
     x_vals = np.arange(0, resolution + dx, dx)
-
-    shift_a = np.random.uniform(1.0, 1.5)
-    n_a = np.random.choice([1, 2, 3])
-    coupling_a = np.random.uniform(0.05, 0.15)
-    intensity_a = np.random.uniform(2, 4)
-    a = feature(shift=shift_a, n=n_a, coupling=coupling_a, intensity=intensity_a, x=x_vals)
-
-    shift_b = np.random.uniform(1.8, 2.2)
+    
+    shift_a = np.random.uniform(1.2, 1.3)
+    shift_b = np.random.uniform(1.9, 2.0)
+    shift_c = np.random.uniform(4.05, 4.15)
+    
+    n_a = np.random.choice([1, 2])
     n_b = 0
-    coupling_b = np.random.uniform(0.05, 0.15)
-    intensity_b = np.random.uniform(2, 4)
-    b = feature(shift_b, n_b, coupling_b, intensity_b, x_vals)
-
-    shift_c = np.random.uniform(4.0, 4.2)
-    n_c = np.random.choice([2, 3, 4])
-    coupling_c = np.random.uniform(0.05, 0.15)
-    intensity_c = np.random.uniform(1, 3)
-    c = feature(shift_c, n_c, coupling_c, intensity_c, x_vals)
-
+    n_c = np.random.choice([2, 3])
+    
+    coupling_a = np.random.uniform(0.08, 0.12)
+    coupling_b = np.random.uniform(0.08, 0.12)
+    coupling_c = np.random.uniform(0.08, 0.12)
+    
+    intensity_a = np.random.uniform(2, 3)
+    intensity_b = np.random.uniform(2, 3)
+    intensity_c = np.random.uniform(1, 2)
+    
+    a = feature(shift=shift_a, n=n_a, coupling=coupling_a, intensity=intensity_a, x=x_vals)
+    b = feature(shift=shift_b, n=n_b, coupling=coupling_b, intensity=intensity_b, x=x_vals)
+    c = feature(shift=shift_c, n=n_c, coupling=coupling_c, intensity=intensity_c, x=x_vals)
+    
     summed_features = a + b + c
-    broadening = np.random.uniform(0.005, 0.02)
+    
+    broadening = np.random.uniform(0.01, 0.015)
+    
     fid = makefid(summed_features, broadening, x_vals)
     spectrum = transform(fid, resolution=resolution)
     return x_vals, fid, spectrum
 
 def simulate_random_zulf():
-    
     resolution = 4096
     dt = 1e-4
-    t_vals = np.arange(0, resolution * dt, dt)
+    t_vals = np.arange(0, resolution * dt, dt)  
     
-   
-    peak1_freq = np.random.uniform(110, 115)
-    peak2_freq = np.random.uniform(185, 190)
+    peak1_freq = np.random.uniform(112, 114)
+    peak2_freq = np.random.uniform(187, 189)
     
-    
-    T2 = np.random.uniform(0.9, 1.1)
+    T2 = np.random.uniform(0.95, 1.05)
     
     fid = (np.cos(2 * np.pi * peak1_freq * t_vals) +
            np.cos(2 * np.pi * peak2_freq * t_vals)) * np.exp(-t_vals / T2)
@@ -74,6 +74,7 @@ def simulate_random_zulf():
     return t_vals, fid, spectrum
 
 def export_csv(data, folder, filename, header=None):
+    """Saves data in CSV format to the specified folder."""
     if not os.path.exists(folder):
         os.makedirs(folder)
     filepath = os.path.join(folder, filename)
@@ -81,7 +82,8 @@ def export_csv(data, folder, filename, header=None):
     print(f"Saved file: {filepath}")
 
 def main():
-    n_simulations = 500
+    n_simulations = 2000
+    
     base_folder = "fid_files"
     high_field_folder = os.path.join(base_folder, "high_field")
     zulf_folder = os.path.join(base_folder, "ultra_low_field")
@@ -98,19 +100,39 @@ def main():
     for i in range(n_simulations):
         x_nmr, fid_nmr, spectrum_nmr = simulate_random_nmr()
         freq_nmr, spec_nmr = spectrum_nmr
-
+        
         t_zulf, fid_zulf, spectrum_zulf = simulate_random_zulf()
         freq_zulf, spec_zulf = spectrum_zulf
 
         fid_filename = f"nmr_fid_{i:04d}.csv"
         spec_filename = f"nmr_spectrum_{i:04d}.csv"
-        export_csv(np.column_stack([x_nmr, fid_nmr]), hf_fid_folder, fid_filename, header="Time,Intensity")
-        export_csv(np.column_stack([freq_nmr, spec_nmr]), hf_spec_folder, spec_filename, header="Frequency,Intensity")
+        export_csv(
+            np.column_stack([x_nmr, fid_nmr]),
+            hf_fid_folder,
+            fid_filename,
+            header="Time,Intensity"
+        )
+        export_csv(
+            np.column_stack([freq_nmr, spec_nmr]),
+            hf_spec_folder,
+            spec_filename,
+            header="Frequency,Intensity"
+        )
 
         fid_filename_z = f"zulf_fid_{i:04d}.csv"
         spec_filename_z = f"zulf_spectrum_{i:04d}.csv"
-        export_csv(np.column_stack([t_zulf, fid_zulf]), zulf_fid_folder, fid_filename_z, header="Time,Intensity")
-        export_csv(np.column_stack([freq_zulf, spec_zulf]), zulf_spec_folder, spec_filename_z, header="Frequency,Intensity")
+        export_csv(
+            np.column_stack([t_zulf, fid_zulf]),
+            zulf_fid_folder,
+            fid_filename_z,
+            header="Time,Intensity"
+        )
+        export_csv(
+            np.column_stack([freq_zulf, spec_zulf]),
+            zulf_spec_folder,
+            spec_filename_z,
+            header="Frequency,Intensity"
+        )
 
         if (i + 1) % 50 == 0:
             print(f"Generated {i + 1}/{n_simulations} simulations.")
