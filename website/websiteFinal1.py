@@ -375,6 +375,7 @@ def bios():
                 - Guitar  
                 - Coding  
                 - Gaming  
+                            
                 **🧏‍♂️ Worked On:** Complete website development and integration of model; optimizatin of model
                 """)
 
@@ -394,6 +395,7 @@ def bios():
                 - Chess  
                 - Coding  
                 - Basketball  
+                            
                 **🤕 Worked On:** Developed deep learning model; designed and executed data generation
                 """)
 
