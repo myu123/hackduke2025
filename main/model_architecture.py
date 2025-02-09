@@ -22,7 +22,6 @@ class HybridZulfModel(nn.Module):
         )
         
         self.ln_conv = nn.LayerNorm(conv_filters)
-
         self.activation = nn.GELU()
         self.dropout_conv = nn.Dropout(dropout)
         
@@ -44,7 +43,6 @@ class HybridZulfModel(nn.Module):
         )
 
     def forward(self, x):
-        x = x.permute(0, 2, 1)
         x = self.conv(x)
         x = x.permute(0, 2, 1)
         x = self.ln_conv(x)
@@ -55,6 +53,7 @@ class HybridZulfModel(nn.Module):
         return output
 
 def weighted_mse_loss(pred, target, weight=10.0):
+    pred = pred.squeeze(-1)
     diff = pred - target
     weights = torch.where(target > 0.5, weight, 1.0)
     return torch.mean(weights * diff ** 2)
