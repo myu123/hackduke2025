@@ -4,20 +4,20 @@ import torch.nn as nn
 class HybridZulfModel(nn.Module):
     def __init__(
         self,
-        input_channels=2, 
-        conv_filters=64, 
+        input_channels=2,
+        conv_filters=64,
         lstm_units=128,
-        num_layers=2, 
-        dropout=0.3, 
+        num_layers=2,
+        dropout=0.2,  
         seq_length=1000
     ):
         super().__init__()
         self.seq_length = seq_length
-        
+
         self.conv1 = nn.Conv1d(
-            in_channels=input_channels, 
-            out_channels=conv_filters, 
-            kernel_size=5, 
+            in_channels=input_channels,
+            out_channels=conv_filters,
+            kernel_size=5,
             padding=2
         )
         self.ln_conv1 = nn.LayerNorm(conv_filters)
@@ -25,14 +25,23 @@ class HybridZulfModel(nn.Module):
         self.dropout_conv1 = nn.Dropout(dropout)
 
         self.conv2 = nn.Conv1d(
-            in_channels=conv_filters, 
-            out_channels=conv_filters, 
-            kernel_size=5, 
+            in_channels=conv_filters,
+            out_channels=conv_filters,
+            kernel_size=5,
             padding=2
         )
         self.ln_conv2 = nn.LayerNorm(conv_filters)
         self.dropout_conv2 = nn.Dropout(dropout)
-        
+
+        self.conv3 = nn.Conv1d(
+            in_channels=conv_filters,
+            out_channels=conv_filters,
+            kernel_size=5,
+            padding=2
+        )
+        self.ln_conv3 = nn.LayerNorm(conv_filters)
+        self.dropout_conv3 = nn.Dropout(dropout)
+
         self.lstm = nn.LSTM(
             input_size=conv_filters,
             hidden_size=lstm_units,
@@ -55,34 +64,39 @@ class HybridZulfModel(nn.Module):
         )
 
     def forward(self, x):
-        """
-        x shape: (batch, channels, seq_length)
-        Goal: feed LSTM with (batch, seq_length, features).
-        """
-        x = self.conv1(x)
-        x = x.permute(0, 2, 1)
+        x = self.conv1(x)                
+        x = x.permute(0, 2, 1)           
         x = self.ln_conv1(x)
         x = self.activation(x)
         x = self.dropout_conv1(x)
-        
-        x = x.permute(0, 2, 1)
-        x = self.conv2(x)
+        x = x.permute(0, 2, 1)           
+
+        x = self.conv2(x)               
         x = x.permute(0, 2, 1)
         x = self.ln_conv2(x)
         x = self.activation(x)
         x = self.dropout_conv2(x)
-        
-        
-        lstm_out, _ = self.lstm(x)  
-        
-        output = self.fc(lstm_out)  
+        x = x.permute(0, 2, 1)
+
+      
+        x = self.conv3(x)
+        x = x.permute(0, 2, 1)
+        x = self.ln_conv3(x)
+        x = self.activation(x)
+        x = self.dropout_conv3(x)
+        x = x.permute(0, 2, 1)           
+
+        x = x.permute(0, 2, 1)           
+        lstm_out, _ = self.lstm(x)       
+
+        output = self.fc(lstm_out)      
         return output
 
 def weighted_mse_loss(pred, target, weight=10.0):
-    pred = pred.squeeze(-1)
+    pred = pred.squeeze(-1)  
     diff = pred - target
     weights = torch.where(target > 0.5, weight, 1.0)
-    return torch.mean(weights * diff ** 2)
+    return torch.mean(weights * (diff ** 2))
 
 def mae_loss(pred, target):
     pred = pred.squeeze(-1)
