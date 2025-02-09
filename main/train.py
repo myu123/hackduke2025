@@ -1,108 +1,62 @@
 import os
-import numpy as np
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.amp import GradScaler, autocast
 from tqdm import tqdm
-import matplotlib.pyplot as plt
-from scipy.special import comb
-from model import HybridZulfModel, weighted_mse_loss
 import psutil
+import matplotlib.pyplot as plt
+import numpy as np
 
-def feature(shift, n, coupling, intensity, x):
-    result = np.zeros_like(x, dtype=float)
-    for k in range(n + 1):
-        result += comb(n, k) * intensity / (n + 1) * np.cos(x * (shift + coupling * (k - n/2)))
-    return result
+# Import simulation utilities and dataset from simulation.py.
+from hf_ulf_synthetic import simulate_random_nmr, simulate_random_zulf, downsample
 
-def makefid(feature_values, broadening, x):
-    return np.exp(-broadening * x) * feature_values
-
-def transform(fid, resolution=4096):
-    fft_vals = np.fft.fft(fid)
-    fft_vals = np.real(fft_vals)
-    half = len(fft_vals) // 2
-    fft_vals = fft_vals[:half]
-    freq_axis = np.arange(1, half + 1) / (resolution / (2 * np.pi))
-    return freq_axis, fft_vals
-
-def simulate_random_nmr():
-    resolution = 4096
-    dx = 0.1
-    x_vals = np.arange(0, resolution + dx, dx)
-    
-    shift_a = np.random.uniform(1.0, 1.5)
-    n_a = np.random.choice([1, 2, 3])
-    coupling_a = np.random.uniform(0.05, 0.15)
-    intensity_a = np.random.uniform(2, 4)
-    a = feature(shift_a, n_a, coupling_a, intensity_a, x_vals)
-    
-    shift_b = np.random.uniform(1.8, 2.2)
-    n_b = 0
-    coupling_b = np.random.uniform(0.05, 0.15)
-    intensity_b = np.random.uniform(2, 4)
-    b = feature(shift_b, n_b, coupling_b, intensity_b, x_vals)
-    
-    shift_c = np.random.uniform(4.0, 4.2)
-    n_c = np.random.choice([2, 3, 4])
-    coupling_c = np.random.uniform(0.05, 0.15)
-    intensity_c = np.random.uniform(1, 3)
-    c = feature(shift_c, n_c, coupling_c, intensity_c, x_vals)
-    
-    summed_features = a + b + c
-    broadening = np.random.uniform(0.005, 0.02)
-    fid = makefid(summed_features, broadening, x_vals)
-    spectrum = transform(fid, resolution=resolution)
-    return x_vals, fid, spectrum
-
-def simulate_random_zulf():
-    resolution = 4096
-    dt = 1e-4
-    t_vals = np.arange(0, resolution * dt, dt)
-    
-    peak1_freq = np.random.uniform(100, 120)
-    peak2_freq = np.random.uniform(180, 200)
-    T2 = np.random.uniform(0.8, 1.2)
-    fid = (np.cos(2 * np.pi * peak1_freq * t_vals) +
-           np.cos(2 * np.pi * peak2_freq * t_vals)) * np.exp(-t_vals / T2)
-    
-    fft_vals = np.fft.fft(fid)
-    fft_vals = np.fft.fftshift(fft_vals)
-    freqs = np.fft.fftfreq(len(fid), d=dt)
-    freqs = np.fft.fftshift(freqs)
-    spectrum = (freqs, np.abs(fft_vals))
-    return t_vals, fid, spectrum
-
-def downsample(signal, target_length):
-    original_length = len(signal)
-    indices = np.linspace(0, original_length - 1, target_length)
-    return np.interp(indices, np.arange(original_length), signal)
-
+# Define the synthetic dataset.
 class SyntheticNMRDataset(torch.utils.data.Dataset):
+    """
+    Synthetic NMR Dataset.
+    
+    For each sample:
+      - A high-field FID is generated via simulate_random_nmr()
+      - A ZULF FID is generated via simulate_random_zulf()
+      
+    The signals are downsampled to a fixed sequence length.
+    The baseline is computed by scaling the ZULF FID so that its mean magnitude matches that of the high-field FID.
+    The target is the difference between the high-field FID and this baseline.
+    The input is a 2-channel tensor: [baseline, ZULF FID].
+    """
     def __init__(self, num_samples, seq_length):
         self.num_samples = num_samples
         self.seq_length = seq_length
-    
+
     def __len__(self):
         return self.num_samples
-    
+
     def __getitem__(self, idx):
         _, high_field_fid, _ = simulate_random_nmr()
         _, zulf_fid, _ = simulate_random_zulf()
-        
+
         high_field_ds = downsample(high_field_fid, self.seq_length)
         zulf_ds = downsample(zulf_fid, self.seq_length)
-        
+
         scale = np.mean(np.abs(high_field_ds)) / (np.mean(np.abs(zulf_ds)) + 1e-8)
         baseline = zulf_ds * scale
-        
+
         target = high_field_ds - baseline
-        
         input_data = np.stack([baseline, zulf_ds], axis=0)
         return (torch.tensor(input_data, dtype=torch.float32),
                 torch.tensor(target, dtype=torch.float32))
+
+def print_memory_usage():
+    process = psutil.Process(os.getpid())
+    print(f"Memory usage: {process.memory_info().rss / 1024 ** 2:.2f} MB")
+
+def enforce_channels_first(x):
+    # Ensure tensor shape is [batch, channels, seq_length]
+    if x.dim() == 3:
+        if x.shape[1] != 2 and x.shape[2] == 2:
+            x = x.permute(0, 2, 1)
+    return x
 
 class EarlyStopping:
     def __init__(self, patience=10, delta=0.001):
@@ -124,33 +78,20 @@ class EarlyStopping:
             if self.counter >= self.patience:
                 self.early_stop = True
 
-def print_memory_usage():
-    process = psutil.Process(os.getpid())
-    print(f"Memory usage: {process.memory_info().rss / 1024 ** 2:.2f} MB")
-
-def enforce_channels_first(x):
-    if x.dim() == 3:
-        if x.size(2) == 2 and x.size(1) != 2:
-            x = x.permute(0, 2, 1)
-    return x
-
-def enforce_channels_first(x):
-    if x.dim() == 3:
-        if x.shape[1] != 2 and x.shape[2] == 2:
-            x = x.permute(0, 2, 1)
-    return x
+# Import model and loss from model.py.
+from model import HybridZulfModel, weighted_mse_loss
 
 def train():
     config = {
-        'batch_size': 64,
-        'lr': 3e-4,
-        'num_epochs': 50,
-        'patience': 15,
-        'grad_clip': 1.0,
-        'mixed_precision': True,
-        'seq_length': 1000,
-        'train_samples': 1000,
-        'test_samples': 200
+        'batch_size': 128,
+        'lr': 5e-3,
+        'num_epochs': 5,
+        'patience': 5,
+        'grad_clip': 2.0,
+        'full_precision': True,
+        'seq_length': 1024,
+        'train_samples': 5000,
+        'test_samples': 500
     }
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -160,41 +101,36 @@ def train():
     train_dataset = SyntheticNMRDataset(num_samples=config['train_samples'], seq_length=config['seq_length'])
     test_dataset = SyntheticNMRDataset(num_samples=config['test_samples'], seq_length=config['seq_length'])
     
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4, pin_memory=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], num_workers=2, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'],
+                                                shuffle=True, num_workers=4, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'],
+                                               num_workers=2, pin_memory=True)
     
     model = HybridZulfModel(input_channels=2, seq_length=config['seq_length']).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-5)
-    
     scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.3, patience=2, verbose=True)
-
     early_stopping = EarlyStopping(patience=config['patience'])
-    scaler = GradScaler(enabled=config['mixed_precision'])
+    scaler = GradScaler(enabled=config['full_precision'])
     
     best_loss = float('inf')
     for epoch in range(config['num_epochs']):
         model.train()
         epoch_loss = 0.0
-        
         with tqdm(train_loader, unit="batch", desc=f"Epoch {epoch+1}") as tepoch:
             for x, y in tepoch:
                 x = enforce_channels_first(x)
                 x, y = x.to(device), y.to(device)
                 optimizer.zero_grad()
-                
-                with autocast(device_type=device.type, enabled=config['mixed_precision']):
+                with autocast(device_type=device.type, enabled=config['full_precision']):
                     pred = model(x)
                     loss = weighted_mse_loss(pred, y)
-                
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), config['grad_clip'])
                 scaler.step(optimizer)
                 scaler.update()
-                
                 epoch_loss += loss.item()
                 tepoch.set_postfix(loss=f"{loss.item():.4f}", lr=f"{optimizer.param_groups[0]['lr']:.2e}")
-        
         epoch_loss /= len(train_loader)
         
         model.eval()
@@ -209,9 +145,7 @@ def train():
         
         print(f"Epoch {epoch+1} | Train Loss: {epoch_loss:.4f} | Val Loss: {val_loss:.4f}")
         print(f"Current Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")
-        
         print_memory_usage()
-        
         if val_loss < best_loss:
             best_loss = val_loss
             torch.save({
@@ -221,30 +155,24 @@ def train():
                 'loss': best_loss,
             }, 'best_model.pth')
             print(f"Saved new best model with loss {best_loss:.4f}")
-        
         early_stopping(val_loss)
         scheduler.step(val_loss)
-        
         if early_stopping.early_stop:
             print("Early stopping triggered")
             break
-    
     plot_predictions(model, device, test_loader)
 
 def plot_predictions(model, device, test_loader):
     model.eval()
     checkpoint = torch.load('best_model.pth', map_location=device)
     model.load_state_dict(checkpoint['model_state'])
-    
     with torch.no_grad():
         x, y_true = next(iter(test_loader))
         x = enforce_channels_first(x)
         x, y_true = x[:3].to(device), y_true[:3].to(device)
         y_pred = model(x)
-        
         baseline = x[:, 0, :]
         reconstructed = baseline + y_pred
-        
         plt.figure(figsize=(12, 8))
         for i in range(3):
             plt.subplot(3, 1, i+1)
