@@ -26,12 +26,10 @@ def simulate_high_field_nmr(smoothing_sigma=4):
     resolution = 4096
     dx = 0.1
     x_vals = np.arange(0, resolution + dx, dx)
-    
     a = feature(shift=1.2, n=2, coupling=0.1, intensity=3, x=x_vals)
     b = feature(shift=2.0, n=0, coupling=0.1, intensity=3, x=x_vals)
     c = feature(shift=4.1, n=3, coupling=0.1, intensity=2, x=x_vals)
     summed_features = a + b + c
-    
     broadening = 0.01
     fid = makefid(summed_features, broadening, x_vals)
     fid_smoothed = gaussian_smoothing(fid, sigma=smoothing_sigma)
@@ -42,12 +40,10 @@ def simulate_zulf_nmr(smoothing_sigma=3):
     resolution = 4096
     dt = 0.1
     t_vals = np.arange(0, resolution + dt, dt)
-    
     a = feature(shift=0, n=2, coupling=0.1, intensity=3, x=t_vals)
     b = feature(shift=0, n=0, coupling=0.1, intensity=3, x=t_vals)
     c = feature(shift=0, n=3, coupling=0.1, intensity=2, x=t_vals)
     summed_features = a + b + c
-    
     broadening = 0.01
     fid = makefid(summed_features, broadening, t_vals)
     fid_smoothed = gaussian_smoothing(fid, sigma=smoothing_sigma)
