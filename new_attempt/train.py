@@ -12,7 +12,6 @@ import psutil
 
 from model_architecture import HybridZulfModel, weighted_mse_loss, mae_loss
 
-
 def feature(shift, n, coupling, intensity, x):
     result = np.zeros_like(x, dtype=float)
     for k in range(n + 1):
@@ -64,11 +63,9 @@ def simulate_random_zulf():
     dt = 1e-4
     t_vals = np.arange(0, resolution * dt, dt)
     
-    peak1_freq = np.random.uniform(110, 115)
-    peak2_freq = np.random.uniform(185, 190)
-    
-    T2 = np.random.uniform(0.9, 1.1)
-    
+    peak1_freq = np.random.uniform(100, 120)
+    peak2_freq = np.random.uniform(180, 200)
+    T2 = np.random.uniform(0.8, 1.2)
     fid = (np.cos(2 * np.pi * peak1_freq * t_vals) +
            np.cos(2 * np.pi * peak2_freq * t_vals)) * np.exp(-t_vals / T2)
     
@@ -145,6 +142,10 @@ def print_memory_usage():
     print(f"Memory usage: {process.memory_info().rss / 1024 ** 2:.2f} MB")
 
 def enforce_channels_first(x):
+    """
+    Ensures x shape is (batch, channels, seq_length).
+    If the last dimension is 2 and second-last is not 2, we permute.
+    """
     if x.dim() == 3:
         if x.shape[1] != 2 and x.shape[2] == 2:
             x = x.permute(0, 2, 1)
@@ -153,8 +154,8 @@ def enforce_channels_first(x):
 
 def train():
     config = {
-        'batch_size': 64,
-        'lr': 3e-4,
+        'batch_size': 128,
+        'lr': 1e-4,        
         'num_epochs': 50,
         'patience': 15,
         'grad_clip': 1.0,
@@ -171,10 +172,25 @@ def train():
     train_dataset = SyntheticNMRDataset(num_samples=config['train_samples'], seq_length=config['seq_length'])
     test_dataset = SyntheticNMRDataset(num_samples=config['test_samples'], seq_length=config['seq_length'])
     
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, num_workers=4, pin_memory=True)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=config['batch_size'], num_workers=2, pin_memory=True)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=config['batch_size'],
+        shuffle=True,
+        num_workers=4,
+        pin_memory=True
+    )
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=config['batch_size'],
+        num_workers=2,
+        pin_memory=True
+    )
     
-    model = HybridZulfModel(input_channels=2, seq_length=config['seq_length']).to(device)
+    model = HybridZulfModel(
+        input_channels=2,
+        seq_length=config['seq_length'],
+        dropout=0.2  
+    ).to(device)
     optimizer = optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-5)
     scheduler = ReduceLROnPlateau(optimizer, 'min', factor=0.3, patience=2, verbose=True)
     
@@ -194,7 +210,7 @@ def train():
                 
                 with autocast(device_type=device.type, enabled=config['mixed_precision']):
                     pred = model(x)
-                    loss = mae_loss(pred, y)
+                    loss = weighted_mse_loss(pred, y)
                 
                 scaler.scale(loss).backward()
                 scaler.unscale_(optimizer)
@@ -203,7 +219,10 @@ def train():
                 scaler.update()
                 
                 epoch_loss += loss.item()
-                tepoch.set_postfix(loss=f"{loss.item():.4f}", lr=f"{optimizer.param_groups[0]['lr']:.2e}")
+                tepoch.set_postfix(
+                    loss=f"{loss.item():.4f}",
+                    lr=f"{optimizer.param_groups[0]['lr']:.2e}"
+                )
         
         epoch_loss /= len(train_loader)
         
@@ -214,7 +233,7 @@ def train():
                 x = enforce_channels_first(x)
                 x, y = x.to(device), y.to(device)
                 pred = model(x)
-                val_loss += mae_loss(pred, y).item()
+                val_loss += weighted_mse_loss(pred, y).item()
         val_loss /= len(test_loader)
         
         print(f"Epoch {epoch+1} | Train Loss: {epoch_loss:.4f} | Val Loss: {val_loss:.4f}")
@@ -242,7 +261,6 @@ def train():
     plot_predictions(model, device, test_loader)
 
 def plot_predictions(model, device, test_loader):
-    
     checkpoint = torch.load('best_model.pth', map_location=device)
     model.load_state_dict(checkpoint['model_state'])
     model.eval()
@@ -250,24 +268,21 @@ def plot_predictions(model, device, test_loader):
     x_batch, y_batch = next(iter(test_loader))
     x_batch = enforce_channels_first(x_batch)
     
-   
     x_plot = x_batch[:3].to(device)
     y_true_plot = y_batch[:3].to(device)
     
     with torch.no_grad():
         y_pred_plot = model(x_plot)
     
-
     x_plot_np = x_plot.cpu().numpy()
     y_true_np = y_true_plot.cpu().numpy()
     y_pred_np = y_pred_plot.cpu().numpy()
-  
+    
     baseline = x_plot_np[:, 0, :]
     
     plt.figure(figsize=(12, 8))
     for i in range(3):
         plt.subplot(3, 1, i+1)
-       
         true_high_field = baseline[i] + y_true_np[i]
         reconstructed = baseline[i] + y_pred_np[i]
         
